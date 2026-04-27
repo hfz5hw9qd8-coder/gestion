@@ -29,7 +29,7 @@ class ProjectViewModel {
     }
     
     var filteredAndSortedProjects: [Project] {
-        var filtered = projects.filter { project in
+        let filtered = projects.filter { project in
             searchText.isEmpty || project.name.localizedCaseInsensitiveContains(searchText) ||
             project.taskDescription.localizedCaseInsensitiveContains(searchText)
         }
