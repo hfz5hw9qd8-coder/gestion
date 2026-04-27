@@ -2,7 +2,7 @@ import SwiftData
 
 enum AppModelContainer {
     static func make() -> ModelContainer {
-        let schema: [any PersistentModel.Type] = [
+        let schema = Schema([
             ClientRecord.self,
             InterventionRecord.self,
             QuoteRecord.self,
@@ -11,7 +11,7 @@ enum AppModelContainer {
             InventoryItemRecord.self,
             InventoryMovementRecord.self,
             StockUsageRecord.self
-        ]
+        ])
 
         do {
             let config = ModelConfiguration(cloudKitDatabase: .automatic)
