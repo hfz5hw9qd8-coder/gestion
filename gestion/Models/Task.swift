@@ -4,25 +4,28 @@ import SwiftData
 @Model
 final class Task {
     var title: String
-    var description: String
+    var taskDescription: String
     var isCompleted: Bool
     var priority: Priority
     var dueDate: Date?
     var createdAt: Date
     var updatedAt: Date
+    var project: Project?
     
     init(
         title: String,
-        description: String = "",
+        taskDescription: String = "",
         isCompleted: Bool = false,
         priority: Priority = .medium,
-        dueDate: Date? = nil
+        dueDate: Date? = nil,
+        project: Project? = nil
     ) {
         self.title = title
-        self.description = description
+        self.taskDescription = taskDescription
         self.isCompleted = isCompleted
         self.priority = priority
         self.dueDate = dueDate
+        self.project = project
         self.createdAt = Date()
         self.updatedAt = Date()
     }
