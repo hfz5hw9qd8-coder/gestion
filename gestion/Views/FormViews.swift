@@ -56,7 +56,7 @@ struct InterventionFormView: View {
             Form {
                 Section("Intervention") {
                     Picker("Client", selection: $draft.clientID) {
-                        Text("Aucun").tag(PersistentIdentifier?.none)
+                        Text("Aucun").tag(nil as PersistentIdentifier?)
                         ForEach(clients) { client in
                             Text(client.name).tag(Optional(client.id))
                         }

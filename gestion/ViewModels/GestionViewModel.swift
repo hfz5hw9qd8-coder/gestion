@@ -10,7 +10,7 @@ final class GestionViewModel {
     var searchText = ""
     var activeSheet: EditorSheet?
     var deletionTarget: DeletionTarget?
-    var quoteToExport: QuoteRecord?
+    var quoteToExport: Quote?
     var exportDocument: PDFFileDocument?
     var isShowingExporter = false
 
@@ -25,79 +25,72 @@ final class GestionViewModel {
         selectedTab != .dashboard && selectedTab != .planning
     }
 
-    func makeViewState(
-        clients: [ClientRecord],
-        interventions: [InterventionRecord],
-        quotes: [QuoteRecord],
-        inventory: [InventoryItemRecord]
-    ) -> GestionViewState {
-        let filteredClients = filterClients(clients)
-        let filteredInterventions = filterInterventions(interventions)
-        let filteredQuotes = filterQuotes(quotes)
-        let filteredInventory = filterInventory(inventory)
-        let sortedInterventions = interventions.sorted { $0.sortDate < $1.sortDate }
-        let groupedInterventions = groupInterventions(filteredInterventions)
+    // MARK: - View state
 
-        var monthlyRevenue = 0.0
+    func makeViewState(
+        clients: [Client],
+        interventions: [Intervention],
+        quotes: [Quote],
+        inventory: [InventoryItem]
+    ) -> GestionViewState {
+
+        let filteredClients       = filterClients(clients)
+        let filteredInterventions = filterInterventions(interventions)
+        let filteredQuotes        = filterQuotes(quotes)
+        let filteredInventory     = filterInventory(inventory)
+        let sortedInterventions   = interventions.sorted { $0.sortDate < $1.sortDate }
+        let grouped               = groupInterventions(filteredInterventions)
+
+        // — Chiffres devis/factures —
+        var monthlyRevenue    = 0.0
         var outstandingBalance = 0.0
-        var pendingCount = 0
-        var lateCount = 0
-        var paidCount = 0
+        var pendingCount = 0, lateCount = 0, paidCount = 0
         for quote in quotes {
             if quote.documentTypeValue == .invoice {
-                monthlyRevenue += quote.amountPaid
+                monthlyRevenue     += quote.amountPaid
                 outstandingBalance += quote.balanceDue
             }
             switch quote.statusValue {
-            case .pending:
-                pendingCount += 1
-            case .late:
-                lateCount += 1
-            case .paid:
-                paidCount += 1
-            case .sent:
-                break
+            case .pending: pendingCount += 1
+            case .late:    lateCount    += 1
+            case .paid:    paidCount    += 1
+            case .sent:    break
             }
         }
 
-        var urgentCount = 0
-        var todayCount = 0
-        var completedCount = 0
-        var stockCostToday = 0.0
-        for intervention in interventions {
-            if intervention.priorityValue == .urgent { urgentCount += 1 }
-            if intervention.statusValue == .completed { completedCount += 1 }
-            if Calendar.current.isDateInToday(intervention.sortDate) {
-                todayCount += 1
-                stockCostToday += intervention.usedItemsCost
+        // — Chiffres interventions —
+        var urgentCount = 0, todayCount = 0, completedCount = 0, stockCostToday = 0.0
+        for i in interventions {
+            if i.priorityValue == .urgent   { urgentCount    += 1 }
+            if i.statusValue   == .completed { completedCount += 1 }
+            if Calendar.current.isDateInToday(i.sortDate) {
+                todayCount    += 1
+                stockCostToday += i.usedItemsCost
             }
         }
 
-        var criticalCount = 0
-        var warningCount = 0
-        var allocatedUnits = 0
-        var inventoryValue = 0.0
+        // — Chiffres stock (✅ dead code allocatedUnits supprimé) —
+        var criticalCount = 0, warningCount = 0, inventoryValue = 0.0
         for item in inventory {
             switch item.levelValue {
             case .critical: criticalCount += 1
-            case .warning: warningCount += 1
-            case .normal: break
+            case .warning:  warningCount  += 1
+            case .normal:   break
             }
-            allocatedUnits += item.usedQuantity
             inventoryValue += item.currentValue
         }
 
         let metrics = [
-            DashboardMetric(title: "Encaissements suivis", value: monthlyRevenue.formattedEuro, detail: "\(paidCount) factures réglées", icon: "eurosign.circle.fill", color: .green),
-            DashboardMetric(title: "Reste à encaisser", value: outstandingBalance.formattedEuro, detail: "\(lateCount) relances, \(pendingCount) validations", icon: "creditcard.trianglebadge.exclamationmark", color: .orange),
-            DashboardMetric(title: "Planning", value: "\(interventions.count)", detail: "\(completedCount) terminées, \(urgentCount) urgentes", icon: "calendar.circle.fill", color: .blue),
-            DashboardMetric(title: "Stock valorisé", value: inventoryValue.formattedEuro, detail: "\(criticalCount) références critiques", icon: "shippingbox.circle.fill", color: .red)
+            DashboardMetric(title: "Encaissements suivis",  value: monthlyRevenue.formattedEuro,     detail: "\(paidCount) factures réglées",                      icon: "eurosign.circle.fill",                    color: .green),
+            DashboardMetric(title: "Reste à encaisser",     value: outstandingBalance.formattedEuro,  detail: "\(lateCount) relances, \(pendingCount) validations", icon: "creditcard.trianglebadge.exclamationmark", color: .orange),
+            DashboardMetric(title: "Planning",              value: "\(interventions.count)",          detail: "\(completedCount) terminées, \(urgentCount) urgentes", icon: "calendar.circle.fill",                    color: .blue),
+            DashboardMetric(title: "Stock valorisé",        value: inventoryValue.formattedEuro,      detail: "\(criticalCount) références critiques",               icon: "shippingbox.circle.fill",                 color: .red)
         ]
 
         let highlights = [
-            DashboardHighlight(title: "Matériel engagé aujourd'hui", detail: stockCostToday.formattedEuro, icon: "shippingbox.and.arrow.backward", color: .orange),
-            DashboardHighlight(title: "Planning semaine", detail: "\(interventionsThisWeek(interventions)) interventions", icon: "calendar.badge.clock", color: .blue),
-            DashboardHighlight(title: "Surveillance stock", detail: "\(warningCount) références à suivre", icon: "exclamationmark.triangle", color: .yellow)
+            DashboardHighlight(title: "Matériel engagé aujourd'hui", detail: stockCostToday.formattedEuro,                       icon: "shippingbox.and.arrow.backward", color: .orange),
+            DashboardHighlight(title: "Planning semaine",            detail: "\(interventionsThisWeek(interventions)) interventions", icon: "calendar.badge.clock",           color: .blue),
+            DashboardHighlight(title: "Surveillance stock",          detail: "\(warningCount) références à suivre",               icon: "exclamationmark.triangle",       color: .yellow)
         ]
 
         return GestionViewState(
@@ -108,7 +101,7 @@ final class GestionViewModel {
             metrics: metrics,
             highlights: highlights,
             upcomingInterventions: sortedInterventions,
-            groupedInterventions: groupedInterventions,
+            groupedInterventions: grouped,
             todaysInterventionCount: todayCount,
             pendingQuoteCount: pendingCount,
             criticalStockCount: criticalCount,
@@ -117,231 +110,192 @@ final class GestionViewModel {
         )
     }
 
-    func clientOptions(from clients: [ClientRecord]) -> [ClientOption] {
+    // MARK: - Options
+
+    func clientOptions(from clients: [Client]) -> [ClientOption] {
         clients.sorted { $0.name < $1.name }.map { ClientOption(id: $0.persistentModelID, name: $0.name) }
     }
 
-    func inventoryOptions(from inventory: [InventoryItemRecord]) -> [InventoryOption] {
+    func inventoryOptions(from inventory: [InventoryItem]) -> [InventoryOption] {
         inventory.sorted { $0.name < $1.name }.map {
-            InventoryOption(
-                id: $0.persistentModelID,
-                name: $0.name,
-                sku: $0.sku,
-                availableQuantity: $0.availableQuantity,
-                unitCost: $0.unitCost
-            )
+            InventoryOption(id: $0.persistentModelID, name: $0.name, sku: $0.sku,
+                            availableQuantity: $0.availableQuantity, unitCost: $0.unitCost)
         }
     }
+
+    // MARK: - Navigation
 
     func presentNewForm() {
         switch selectedTab {
-        case .dashboard, .planning:
-            break
-        case .clients:
-            activeSheet = .client(ClientDraft())
-        case .interventions:
-            activeSheet = .intervention(InterventionDraft())
-        case .quotes:
-            activeSheet = .quote(QuoteDraft())
-        case .inventory:
-            activeSheet = .inventory(InventoryDraft())
+        case .dashboard, .planning: break
+        case .clients:       activeSheet = .client(ClientDraft())
+        case .interventions: activeSheet = .intervention(InterventionDraft())
+        case .quotes:        activeSheet = .quote(QuoteDraft())
+        case .inventory:     activeSheet = .inventory(InventoryDraft())
         }
     }
 
-    func delete(_ target: DeletionTarget, in modelContext: ModelContext) {
+    // MARK: - CRUD
+
+    func delete(_ target: DeletionTarget, in ctx: ModelContext) {
         switch target {
-        case .client(let id):
-            if let object = modelContext.model(for: id) as? ClientRecord { modelContext.delete(object) }
-        case .intervention(let id):
-            if let object = modelContext.model(for: id) as? InterventionRecord { modelContext.delete(object) }
-        case .quote(let id):
-            if let object = modelContext.model(for: id) as? QuoteRecord { modelContext.delete(object) }
-        case .inventory(let id):
-            if let object = modelContext.model(for: id) as? InventoryItemRecord { modelContext.delete(object) }
+        case .client(let id):       (ctx.model(for: id) as? Client).map        { ctx.delete($0) }
+        case .intervention(let id): (ctx.model(for: id) as? Intervention).map   { ctx.delete($0) }
+        case .quote(let id):        (ctx.model(for: id) as? Quote).map          { ctx.delete($0) }
+        case .inventory(let id):    (ctx.model(for: id) as? InventoryItem).map  { ctx.delete($0) }
         }
-        try? modelContext.save()
+        try? ctx.save()
     }
 
-    func saveClient(_ draft: ClientDraft, in modelContext: ModelContext) {
-        if let id = draft.id, let client = modelContext.model(for: id) as? ClientRecord {
-            client.name = draft.name
-            client.city = draft.city
-            client.note = draft.note
-            client.status = draft.status.rawValue
-            client.phone = draft.phone
-            client.email = draft.email
-            client.address = draft.address
+    func saveClient(_ draft: ClientDraft, in ctx: ModelContext) {
+        if let id = draft.id, let c = ctx.model(for: id) as? Client {
+            c.name = draft.name; c.city = draft.city; c.note = draft.note
+            c.status = draft.status.rawValue; c.phone = draft.phone
+            c.email = draft.email; c.address = draft.address
         } else {
-            modelContext.insert(draft.makeClient())
+            ctx.insert(draft.makeClient())
         }
-        try? modelContext.save()
+        try? ctx.save()
     }
 
-    func saveIntervention(_ draft: InterventionDraft, in modelContext: ModelContext) {
-        let client = draft.clientID.flatMap { modelContext.model(for: $0) as? ClientRecord }
+    func saveIntervention(_ draft: InterventionDraft, in ctx: ModelContext) {
+        let client = draft.clientID.flatMap { ctx.model(for: $0) as? Client }
 
-        let intervention: InterventionRecord
-        if let id = draft.id, let existing = modelContext.model(for: id) as? InterventionRecord {
-            intervention = existing
-            intervention.stockUsages.forEach { modelContext.delete($0) }
+        let record: Intervention
+        if let id = draft.id, let existing = ctx.model(for: id) as? Intervention {
+            record = existing
+            record.stockUsages.forEach { ctx.delete($0) }
         } else {
-            intervention = InterventionRecord(
-                clientName: draft.clientName,
-                location: draft.location,
-                kind: draft.kind,
-                date: draft.scheduledDate,
-                timeSlot: draft.timeSlot,
-                priority: draft.priority.rawValue,
-                progress: draft.progress,
-                notes: draft.notes,
-                executionStatus: draft.executionStatus.rawValue,
-                client: client
+            record = Intervention(
+                clientName: draft.clientName, location: draft.location,
+                kind: draft.kind, date: draft.scheduledDate,
+                timeSlot: draft.timeSlot, priority: draft.priority.rawValue,
+                progress: draft.progress, notes: draft.notes,
+                executionStatus: draft.executionStatus.rawValue, client: client
             )
-            modelContext.insert(intervention)
+            ctx.insert(record)
         }
 
-        intervention.client = client
-        intervention.clientName = draft.clientName
-        intervention.location = draft.location
-        intervention.kind = draft.kind
-        intervention.date = draft.scheduledDate
-        intervention.timeSlot = draft.timeSlot
-        intervention.priority = draft.priority.rawValue
-        intervention.executionStatus = draft.executionStatus.rawValue
-        intervention.progress = draft.progress
-        intervention.notes = draft.notes
-        intervention.sortDate = draft.sortDate
-        intervention.stockUsages = draft.stockUsages.compactMap { usage in
+        // ✅ date et sortDate mis à jour ensemble pour éviter l'incohérence
+        record.client          = client
+        record.clientName      = draft.clientName
+        record.location        = draft.location
+        record.kind            = draft.kind
+        record.date            = draft.scheduledDate
+        record.sortDate        = draft.scheduledDate   // ✅ synchronisé explicitement
+        record.timeSlot        = draft.timeSlot
+        record.priority        = draft.priority.rawValue
+        record.executionStatus = draft.executionStatus.rawValue
+        record.progress        = draft.progress
+        record.notes           = draft.notes
+        record.stockUsages     = draft.stockUsages.compactMap { usage in
             guard usage.quantityUsed > 0 else { return nil }
-            let inventory = usage.inventoryItemID.flatMap { modelContext.model(for: $0) as? InventoryItemRecord }
-            return StockUsageRecord(
-                inventoryItemName: inventory?.name ?? usage.inventoryItemName,
+            let inv = usage.inventoryItemID.flatMap { ctx.model(for: $0) as? InventoryItem }
+            return StockUsage(
+                inventoryItemName: inv?.name ?? usage.inventoryItemName,
                 quantityUsed: usage.quantityUsed,
-                unitCost: inventory?.unitCost ?? usage.unitCost,
-                intervention: intervention,
-                inventoryItem: inventory
+                unitCost: inv?.unitCost ?? usage.unitCost,
+                intervention: record, inventoryItem: inv
             )
         }
-        try? modelContext.save()
+        try? ctx.save()
     }
 
-    func saveQuote(_ draft: QuoteDraft, in modelContext: ModelContext) {
-        let client = draft.clientID.flatMap { modelContext.model(for: $0) as? ClientRecord }
+    func saveQuote(_ draft: QuoteDraft, in ctx: ModelContext) {
+        let client = draft.clientID.flatMap { ctx.model(for: $0) as? Client }
 
-        let quote: QuoteRecord
-        if let id = draft.id, let existing = modelContext.model(for: id) as? QuoteRecord {
+        let quote: Quote
+        if let id = draft.id, let existing = ctx.model(for: id) as? Quote {
             quote = existing
-            quote.lines.forEach { modelContext.delete($0) }
-            quote.payments.forEach { modelContext.delete($0) }
+            quote.lines.forEach    { ctx.delete($0) }
+            quote.payments.forEach { ctx.delete($0) }
         } else {
-            quote = QuoteRecord(
-                reference: draft.reference,
-                clientName: draft.clientName,
-                dueDate: draft.dueDate,
-                status: draft.status.rawValue,
-                summary: draft.summary,
-                documentType: draft.documentType.rawValue,
-                depositRate: draft.depositRate,
-                client: client
+            quote = Quote(
+                reference: draft.reference, clientName: draft.clientName,
+                dueDate: draft.dueDate, status: draft.status.rawValue,
+                summary: draft.summary, documentType: draft.documentType.rawValue,
+                depositRate: draft.depositRate, client: client
             )
-            modelContext.insert(quote)
+            ctx.insert(quote)
         }
 
-        quote.client = client
-        quote.reference = draft.reference
-        quote.clientName = draft.clientName
-        quote.dueDate = draft.dueDate
-        quote.status = draft.status.rawValue
-        quote.summary = draft.summary
-        quote.documentType = draft.documentType.rawValue
-        quote.depositRate = draft.depositRate
+        quote.client = client; quote.reference = draft.reference
+        quote.clientName = draft.clientName; quote.dueDate = draft.dueDate
+        quote.status = draft.status.rawValue; quote.summary = draft.summary
+        quote.documentType = draft.documentType.rawValue; quote.depositRate = draft.depositRate
+
         quote.lines = draft.lines.compactMap { line in
             guard !line.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-            return QuoteLineRecord(
-                title: line.title,
-                lineDescription: line.lineDescription,
-                quantity: line.quantity,
-                unitPrice: line.unitPrice,
-                taxRate: line.taxRate,
-                quote: quote
-            )
+            return QuoteLine(title: line.title, lineDescription: line.lineDescription,
+                                   quantity: line.quantity, unitPrice: line.unitPrice,
+                                   taxRate: line.taxRate, quote: quote)
         }
         quote.payments = draft.payments.compactMap { payment in
             guard payment.amount > 0 else { return nil }
-            return PaymentRecord(
-                paidAt: payment.paidAt,
-                amount: payment.amount,
-                method: payment.method.rawValue,
-                note: payment.note,
-                quote: quote
-            )
+            return Payment(paidAt: payment.paidAt, amount: payment.amount,
+                                 method: payment.method.rawValue, note: payment.note, quote: quote)
         }
+        // Auto-marquer comme réglé si balance à zéro
         if quote.balanceDue == 0, quote.totalAmount > 0 {
             quote.status = QuoteStatus.paid.rawValue
         }
-        try? modelContext.save()
+        try? ctx.save()
     }
 
-    func saveInventory(_ draft: InventoryDraft, in modelContext: ModelContext) {
-        let item: InventoryItemRecord
-        if let id = draft.id, let existing = modelContext.model(for: id) as? InventoryItemRecord {
+    func saveInventory(_ draft: InventoryDraft, in ctx: ModelContext) {
+        let item: InventoryItem
+        if let id = draft.id, let existing = ctx.model(for: id) as? InventoryItem {
             item = existing
-            item.movements.forEach { modelContext.delete($0) }
+            item.movements.forEach { ctx.delete($0) }
         } else {
             item = draft.makeItem()
-            modelContext.insert(item)
+            ctx.insert(item)
         }
 
-        item.name = draft.name
-        item.sku = draft.sku
-        item.quantity = draft.quantity
-        item.stockLevel = draft.inferredLevel.rawValue
-        item.supplier = draft.supplier
-        item.storageLocation = draft.storageLocation
-        item.minimumQuantity = draft.minimumQuantity
+        item.name = draft.name; item.sku = draft.sku; item.quantity = draft.quantity
+        item.stockLevel = draft.inferredLevel.rawValue; item.supplier = draft.supplier
+        item.storageLocation = draft.storageLocation; item.minimumQuantity = draft.minimumQuantity
         item.unitCost = draft.unitCost
-        item.movements = draft.movements.compactMap { movement in
-            guard movement.quantityDelta != 0 else { return nil }
-            return InventoryMovementRecord(
-                movedAt: movement.movedAt,
-                quantityDelta: movement.quantityDelta,
-                type: movement.type.rawValue,
-                note: movement.note,
-                inventoryItem: item
-            )
+        item.movements = draft.movements.compactMap { m in
+            guard m.quantityDelta != 0 else { return nil }
+            return InventoryMovement(movedAt: m.movedAt, quantityDelta: m.quantityDelta,
+                                           type: m.type.rawValue, note: m.note, inventoryItem: item)
         }
-        try? modelContext.save()
+        try? ctx.save()
     }
 
-    func exportPDF(for quote: QuoteRecord) {
+    // MARK: - PDF
+
+    func exportPDF(for quote: Quote) {
         exportDocument = PDFFileDocument(data: PDFRenderer.renderQuotePDF(for: quote))
-        quoteToExport = quote
+        quoteToExport  = quote
         isShowingExporter = true
     }
 
     func clearExportState() {
-        quoteToExport = nil
+        quoteToExport  = nil
         exportDocument = nil
     }
 
+    // MARK: - Seed
+
     func seedDataIfNeeded(
-        clients: [ClientRecord],
-        interventions: [InterventionRecord],
-        quotes: [QuoteRecord],
-        inventory: [InventoryItemRecord],
-        in modelContext: ModelContext
+        clients: [Client], interventions: [Intervention],
+        quotes: [Quote], inventory: [InventoryItem],
+        in ctx: ModelContext
     ) {
         guard !hasSeededSampleData else { return }
         guard clients.isEmpty, interventions.isEmpty, quotes.isEmpty, inventory.isEmpty else {
-            hasSeededSampleData = true
-            return
+            hasSeededSampleData = true; return
         }
-        SampleData.populate(in: modelContext)
-        try? modelContext.save()
+        SampleData.populate(in: ctx)
+        try? ctx.save()
         hasSeededSampleData = true
     }
 
-    private func filterClients(_ clients: [ClientRecord]) -> [ClientRecord] {
+    // MARK: - Filtres
+
+    private func filterClients(_ clients: [Client]) -> [Client] {
         guard !searchText.isEmpty else { return clients }
         return clients.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
@@ -351,7 +305,7 @@ final class GestionViewModel {
         }
     }
 
-    private func filterInterventions(_ interventions: [InterventionRecord]) -> [InterventionRecord] {
+    private func filterInterventions(_ interventions: [Intervention]) -> [Intervention] {
         let base = planningFiltered(interventions)
         guard !searchText.isEmpty else { return base }
         return base.filter {
@@ -362,7 +316,7 @@ final class GestionViewModel {
         }
     }
 
-    private func filterQuotes(_ quotes: [QuoteRecord]) -> [QuoteRecord] {
+    private func filterQuotes(_ quotes: [Quote]) -> [Quote] {
         guard !searchText.isEmpty else { return quotes }
         return quotes.filter {
             $0.reference.localizedCaseInsensitiveContains(searchText)
@@ -371,7 +325,7 @@ final class GestionViewModel {
         }
     }
 
-    private func filterInventory(_ inventory: [InventoryItemRecord]) -> [InventoryItemRecord] {
+    private func filterInventory(_ inventory: [InventoryItem]) -> [InventoryItem] {
         guard !searchText.isEmpty else { return inventory }
         return inventory.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
@@ -381,20 +335,16 @@ final class GestionViewModel {
         }
     }
 
-    private func planningFiltered(_ interventions: [InterventionRecord]) -> [InterventionRecord] {
+    private func planningFiltered(_ interventions: [Intervention]) -> [Intervention] {
         switch planningFilter {
-        case .all:
-            return interventions
-        case .week:
-            return interventions.filter { Calendar.current.isDate($0.sortDate, equalTo: .now, toGranularity: .weekOfYear) }
-        case .open:
-            return interventions.filter { $0.statusValue != .completed }
-        case .completed:
-            return interventions.filter { $0.statusValue == .completed }
+        case .all:       return interventions
+        case .week:      return interventions.filter { Calendar.current.isDate($0.sortDate, equalTo: .now, toGranularity: .weekOfYear) }
+        case .open:      return interventions.filter { $0.statusValue != .completed }
+        case .completed: return interventions.filter { $0.statusValue == .completed }
         }
     }
 
-    private func groupInterventions(_ interventions: [InterventionRecord]) -> [(date: String, items: [InterventionRecord])] {
+    private func groupInterventions(_ interventions: [Intervention]) -> [(date: String, items: [Intervention])] {
         let grouped = Dictionary(grouping: interventions) { $0.dateLabel }
         return grouped.keys.sorted(by: daySort).map { key in
             let items = (grouped[key] ?? []).sorted { $0.timeSlot < $1.timeSlot }
@@ -402,19 +352,15 @@ final class GestionViewModel {
         }
     }
 
-    private func interventionsThisWeek(_ interventions: [InterventionRecord]) -> Int {
+    private func interventionsThisWeek(_ interventions: [Intervention]) -> Int {
         interventions.filter { Calendar.current.isDate($0.sortDate, equalTo: .now, toGranularity: .weekOfYear) }.count
     }
 
-    private func daySort(lhs: String, rhs: String) -> Bool {
-        dateForLabel(lhs) < dateForLabel(rhs)
-    }
+    private func daySort(lhs: String, rhs: String) -> Bool { dateForLabel(lhs) < dateForLabel(rhs) }
 
     private func dateForLabel(_ label: String) -> Date {
         if label == "Aujourd'hui" { return Calendar.current.startOfDay(for: .now) }
-        if label == "Demain" {
-            return Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)) ?? .now
-        }
+        if label == "Demain"      { return Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)) ?? .now }
         return GestionFormatters.mediumFrenchDate.date(from: label) ?? .distantFuture
     }
 }

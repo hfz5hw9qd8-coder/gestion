@@ -3,22 +3,40 @@ import SwiftData
 enum AppModelContainer {
     static func make() -> ModelContainer {
         let schema = Schema([
-            ClientRecord.self,
-            InterventionRecord.self,
-            QuoteRecord.self,
-            QuoteLineRecord.self,
-            PaymentRecord.self,
-            InventoryItemRecord.self,
-            InventoryMovementRecord.self,
-            StockUsageRecord.self
+            Client.self,
+            Intervention.self,
+            Quote.self,
+            QuoteLine.self,
+            Payment.self,
+            InventoryItem.self,
+            InventoryMovement.self,
+            StockUsage.self
         ])
 
+        // Tentative 1 : avec CloudKit
+        if let container = try? ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(cloudKitDatabase: .automatic)
+        ) {
+            return container
+        }
+
+        // Tentative 2 : sans CloudKit (réseau indisponible, entitlements manquants…)
+        if let container = try? ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(cloudKitDatabase: .none)
+        ) {
+            return container
+        }
+
+        // Tentative 3 : stockage en mémoire (dernier recours, jamais crasher)
         do {
-            let config = ModelConfiguration(cloudKitDatabase: .automatic)
-            return try ModelContainer(for: schema, configurations: config)
+            return try ModelContainer(
+                for: schema,
+                configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+            )
         } catch {
-            let fallback = ModelConfiguration(cloudKitDatabase: .none)
-            return try! ModelContainer(for: schema, configurations: fallback)
+            fatalError("Impossible de créer le ModelContainer : \(error)")
         }
     }
 }
